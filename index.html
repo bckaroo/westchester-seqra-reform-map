@@ -402,73 +402,39 @@
             `;
         }
         
-        // Use L.esri.featureLayer to render municipal boundaries
-        const muniLayer = L.esri.featureLayer({
-            url: 'https://giswww.westchestergov.com/arcgis/rest/services/MunicipalBoundaries/MapServer/0',
-            style: function(feature) {
-                const name = feature.properties.NAME || '';
-                return styleForCategory(getCategory(name));
-            },
-            onEachFeature: function(feature, layer) {
-                const name = feature.properties.NAME || 'Municipality';
-                const sqmiles = feature.properties.SQMILES || null;
-                const category = getCategory(name);
-                layer.bindPopup(createPopupContent(name, sqmiles, category));
-            }
-        }).addTo(map);
+        // Fetch municipal boundaries as GeoJSON directly from ArcGIS REST API
+        const muniUrl = 'https://giswww.westchestergov.com/arcgis/rest/services/MunicipalBoundaries/MapServer/0/query?where=1%3D1&outFields=NAME,SQMILES&outSR=4326&f=geojson';
         
-        // Fit bounds once features load
-        muniLayer.on('load', function(e) {
-            // Query all features to fit bounds
-            L.esri.query({url: 'https://giswww.westchestergov.com/arcgis/rest/services/MunicipalBoundaries/MapServer/0'})
-                .where('1=1')
-                .returnGeometry(false)
-                .run(function(err, fc) {
-                    if (!err && fc.features.length > 0) {
-                        // Use the map's existing view — Westchester County center
-                        map.setView([41.1225, -73.7000], 10);
+        fetch(muniUrl)
+            .then(function(resp) { return resp.json(); })
+            .then(function(geojson) {
+                if (!geojson.features || geojson.features.length === 0) {
+                    L.marker([41.1225, -73.7000]).addTo(map).bindPopup('No municipal boundary data returned from Westchester County GIS.');
+                    return;
+                }
+                
+                const muniLayer = L.geoJSON(geojson, {
+                    style: function(feature) {
+                        const name = feature.properties.NAME || '';
+                        return styleForCategory(getCategory(name));
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const name = feature.properties.NAME || 'Municipality';
+                        const sqmiles = feature.properties.SQMILES || null;
+                        const category = getCategory(name);
+                        layer.bindPopup(createPopupContent(name, sqmiles, category));
                     }
-                });
-        });
+                }).addTo(map);
+                
+                // Fit to municipal bounds
+                map.fitBounds(muniLayer.getBounds(), { padding: [30, 30] });
+            })
+            .catch(function(err) {
+                console.error('Failed to load municipal boundaries:', err);
+                L.marker([41.1225, -73.7000]).addTo(map).bindPopup('Unable to load Westchester County GIS data. The county GIS server may be temporarily unavailable.');
+            });
         
-        // Create popup content for a municipality
-        function createPopupContent(attributes, category) {
-            const population = attributes.TOTAL_POPULATION || "Data unavailable";
-            const landArea = attributes.LAND_AREA || "Data unavailable";
-            
-            return `
-                <div class="popup-content">
-                    <div class="popup-title">${attributes.MUNICIPALITY_NAME || "Municipality"}</div>
-                    
-                    <div class="popup-section">
-                        <div class="popup-label">SEQR Threshold Category:</div>
-                        <span class="threshold-badge threshold-${category}">${category === 'urban' ? '300 Units (Urbanized)' : category === 'nonurban' ? '100 Units (Non-Urban)' : '20 Units (Unzoned)'}</span>
-                    </div>
-                    
-                    <div class="popup-section">
-                        <div class="popup-label">Population:</div>
-                        <div class="popup-value">${typeof population === 'number' ? population.toLocaleString() : population}</div>
-                    </div>
-                    
-                    ${landArea !== "Data unavailable" ? `
-                    <div class="popup-section">
-                        <div class="popup-label">Land Area:</div>
-                        <div class="popup-value">${landArea} sq mi</div>
-                    </div>
-                    ` : ''}
-                    
-                    <div class="popup-section">
-                        <div class="popup-label">Classification:</div>
-                        <div class="popup-value">${category === 'urban' ? 'City or major village with sewer + water districts' : category === 'nonurban' ? 'Town or rural village' : 'Northern county pocket (unzoned)'}</div>
-                    </div>
-                    
-                    <div class="popup-section">
-                        <div class="popup-label">SEQR Reform Impact:</div>
-                        <div class="popup-value">${category === 'urban' ? `Housing projects up to 300 units are exempt from SEQR review (subject to infrastructure requirements)` : category === 'nonurban' ? `Housing projects up to 100 units are exempt from SEQR review` : `Housing projects up to 20 units are exempt from SEQR review`}</div>
-                    </div>
-                </div>
-            `;
-        }
+        // (old duplicate popup function removed — using the one above)
         
         // Note: Infrastructure and Demographics layers are available but commented out
         // to keep the map fast. Enable them if needed:
