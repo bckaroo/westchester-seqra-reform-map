@@ -26,16 +26,21 @@
         .legend-color { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ccc; }
         .legend-label { font-size: 13px; color: #4a4a4a; flex: 1; }
         .legend-sub { font-size: 11px; color: #666; margin-top: -8px; padding-left: 36px; }
-        .popup-content { min-width: 250px; }
-        .popup-title { font-size: 18px; font-weight: 600; color: #1e3a5f; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
-        .popup-section { margin-bottom: 12px; }
-        .popup-label { font-weight: 600; color: #555; font-size: 13px; }
-        .popup-value { color: #333; font-size: 14px; }
+        .popup-content { min-width: 280px; }
+        .popup-title { font-size: 16px; font-weight: 600; color: #1e3a5f; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+        .popup-section { margin-bottom: 8px; }
+        .popup-label { font-weight: 600; color: #555; font-size: 12px; }
+        .popup-value { color: #333; font-size: 13px; }
         .threshold-badge { display: inline-block; padding: 4px 12px; border-radius: 15px; font-size: 12px; font-weight: 600; color: white; }
         .threshold-urban { background: #2d5a87; }
         .threshold-nonurban { background: #c49b2f; }
         .threshold-unzoned { background: #8c3b2f; }
+        .qualify-yes { color: #27ae60; font-weight: 600; }
+        .qualify-no { color: #e74c3c; font-weight: 600; }
+        .qualify-maybe { color: #f39c12; font-weight: 600; }
+        .loading-indicator { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(30,58,95,0.9); color: white; padding: 8px 20px; border-radius: 20px; font-size: 14px; z-index: 1000; display: none; }
         .leaflet-popup-content-wrapper { border-radius: 6px; box-shadow: 0 2px 15px rgba(0,0,0,0.2); }
+        .zoom-hint { position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 8px 14px; border-radius: 6px; font-size: 12px; color: #555; z-index: 999; border: 1px solid #ddd; }
         @media (max-width: 768px) { #map { height: 500px; } .sidebar { padding: 15px 20px; } h1 { font-size: 24px; } }
     </style>
 </head>
@@ -43,33 +48,37 @@
     <div class="container">
         <header>
             <h1>Westchester County: NYS SEQR Reform Impact Map</h1>
-            <p class="subtitle">2026-2027 Enacted Budget — Housing Review Exemptions</p>
+            <p class="subtitle">2026-2027 Enacted Budget — Housing Review Exemptions | Zoom in for property-level detail</p>
         </header>
-        <div id="map"></div>
+        <div id="map">
+            <div class="loading-indicator" id="loader">Loading parcel data…</div>
+            <div class="zoom-hint" id="zoomHint">Zoom in to see individual parcels</div>
+        </div>
         <div class="sidebar">
             <div class="info-panel">
                 <h3>🎯 SEQR Reform Overview</h3>
-                <p>The 2026-2027 NY State Budget (TED Part S) introduces significant exemptions from SEQR review for housing projects.</p>
+                <p>The 2026-2027 NY State Budget (TED Part S) exempts housing from SEQR review based on unit count thresholds. Projects must be on previously disturbed land with existing water/sewer.</p>
                 <h4>Exemption Thresholds:</h4>
                 <ul>
-                    <li><strong>Urbanized Areas:</strong> Up to 300 units exempt</li>
-                    <li><strong>Non-Urban Areas:</strong> Up to 100 units exempt</li>
-                    <li><strong>Unzoned Areas:</strong> Up to 20 units exempt</li>
+                    <li><strong>Urbanized:</strong> Up to 300 units</li>
+                    <li><strong>Non-Urban:</strong> Up to 100 units</li>
+                    <li><strong>Unzoned:</strong> Up to 20 units</li>
                 </ul>
-                <h4>Requirements:</h4>
+                <h4>Parcel Colors:</h4>
                 <ul>
-                    <li>Must be on previously disturbed land</li>
-                    <li>Existing water/sewer connections required</li>
-                    <li>Cannot be in exclusively industrial zones</li>
+                    <li><strong>Green:</strong> Likely qualifies (developed + has water/sewer)</li>
+                    <li><strong>Orange:</strong> Has water/sewer but undeveloped land</li>
+                    <li><strong>Red:</strong> No water/sewer — unlikely to qualify</li>
+                    <li><strong>Gray:</strong> Exempt/institutional — check eligibility</li>
                 </ul>
                 <h4>EIS Timeline:</h4>
-                <p>1 year for initial determination, 2 years max to finalize EIS.</p>
+                <p>1 year for initial determination, 2 years max to finalize.</p>
             </div>
             <div class="info-panel">
-                <h3>🗺️ Legend</h3>
+                <h3>🗺️ Municipal Thresholds</h3>
                 <div class="legend-item">
                     <div class="legend-color" style="background: #2d5a87;"></div>
-                    <div class="legend-label"><span class="threshold-badge threshold-urban">300 Units</span><br>Urbanized Areas<br><small class="legend-sub">Cities & major villages with sewer + water</small></div>
+                    <div class="legend-label"><span class="threshold-badge threshold-urban">300 Units</span><br>Urbanized Areas<br><small class="legend-sub">Cities & major villages</small></div>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background: #c49b2f;"></div>
@@ -77,21 +86,26 @@
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background: #8c3b2f;"></div>
-                    <div class="legend-label"><span class="threshold-badge threshold-unzoned">20 Units</span><br>Unzoned Areas<br><small class="legend-sub">Northern county pockets (rare)</small></div>
+                    <div class="legend-label"><span class="threshold-badge threshold-unzoned">20 Units</span><br>Unzoned Areas<br><small class="legend-sub">Northern county pockets</small></div>
                 </div>
                 <h4>Data Sources:</h4>
                 <ul>
-                    <li><strong>Municipal Boundaries:</strong> Westchester County GIS</li>
-                    <li>Click any municipality for details</li>
+                    <li>Westchester County GIS — Tax Parcels & Municipal Boundaries</li>
+                    <li>Sewer/water from parcel assessment records</li>
+                    <li>Property class from NYS ORPS codes</li>
                 </ul>
             </div>
         </div>
     </div>
     <script>
+    (function() {
         const map = L.map('map', { zoomControl: false }).setView([41.1225, -73.7000], 10);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd' }).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 20, subdomains: 'abcd' }).addTo(map);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.control.attribution({ position: 'bottomleft' }).addAttribution('Westchester County GIS | CartoDB').addTo(map);
+
+        const loader = document.getElementById('loader');
+        const zoomHint = document.getElementById('zoomHint');
 
         const urbanList = ["Yonkers","Mount Vernon","New Rochelle","White Plains","Peekskill","Rye","Port Chester","Tarrytown","Sleepy Hollow","Ossining Village","Ossining","Hastings-on-Hudson","Hastings","Dobbs Ferry","Irvington","Ardsley","Elmsford","Greenburgh","Scarsdale","Bronxville","Eastchester","Tuckahoe","Pelham","Pelham Manor","Mamaroneck","Larchmont","Harrison","Cortlandt"];
         const nonurbanList = ["Bedford","North Castle","New Castle","Somers","Yorktown","Lewisboro","North Salem","Pound Ridge","Mount Kisco","Mount Pleasant","Pleasantville","Briarcliff Manor"];
@@ -101,48 +115,162 @@
             if (nonurbanList.some(u => name.includes(u) || u.includes(name))) return 'nonurban';
             return 'nonurban';
         }
-        function styleForCategory(cat) {
-            const c = cat === 'urban' ? '#2d5a87' : cat === 'nonurban' ? '#c49b2f' : '#8c3b2f';
-            return { fillColor: c, fillOpacity: 0.6, color: '#ffffff', weight: 1.5 };
+
+        // Property class codes: 1xx = residential, 2xx = residential-vacant, 3xx = vacant, 4xx = commercial, 5xx = industrial, 6xx = community, 7xx = state, 8xx = county, 9xx = exempt/special
+        function isDeveloped(propClass) {
+            if (!propClass) return false;
+            const c = propClass.toString();
+            // Residential (1xx), Commercial (4xx), Industrial (5xx), Community (6xx) = developed/disturbed
+            // Vacant land (2xx, 3xx) = undeveloped
+            return /^[1456]/.test(c);
         }
-        function popupContent(name, sqmiles, cat) {
-            const thresh = cat === 'urban' ? '300 Units (Urbanized)' : cat === 'nonurban' ? '100 Units (Non-Urban)' : '20 Units (Unzoned)';
-            const impact = cat === 'urban' ? 'Housing up to 300 units exempt from SEQR (subject to infrastructure requirements)' : cat === 'nonurban' ? 'Housing up to 100 units exempt from SEQR' : 'Housing up to 20 units exempt from SEQR';
-            const cls = cat === 'urban' ? 'City/village with sewer + water districts' : 'Town or rural village';
-            const area = sqmiles ? sqmiles.toFixed(2) + ' sq mi' : 'N/A';
-            return '<div class="popup-content"><div class="popup-title">' + name + '</div>' +
-                '<div class="popup-section"><div class="popup-label">SEQR Threshold:</div><span class="threshold-badge threshold-' + cat + '">' + thresh + '</span></div>' +
-                '<div class="popup-section"><div class="popup-label">Land Area:</div><div class="popup-value">' + area + '</div></div>' +
-                '<div class="popup-section"><div class="popup-label">Classification:</div><div class="popup-value">' + cls + '</div></div>' +
-                '<div class="popup-section"><div class="popup-label">Impact:</div><div class="popup-value">' + impact + '</div></div></div>';
+        function isExempt(propClass) {
+            if (!propClass) return false;
+            return /^9/.test(propClass.toString());
+        }
+        function hasSewer(desc) {
+            if (!desc) return false;
+            const d = desc.toLowerCase();
+            return d.includes('comm') || d.includes('public') || d.includes('sewer');
+        }
+        function hasWater(desc) {
+            if (!desc) return false;
+            const d = desc.toLowerCase();
+            return d.includes('comm') || d.includes('public') || d.includes('water');
         }
 
-        // Fetch municipal boundaries as GeoJSON directly from ArcGIS REST API
-        const url = 'https://giswww.westchestergov.com/arcgis/rest/services/MunicipalBoundaries/MapServer/0/query?where=1%3D1&outFields=NAME,SQMILES&outSR=4326&f=geojson';
-        fetch(url)
-            .then(r => r.json())
-            .then(geojson => {
-                if (!geojson.features || !geojson.features.length) {
-                    L.marker([41.1225, -73.7000]).addTo(map).bindPopup('No boundary data returned.').openPopup();
-                    return;
-                }
-                const layer = L.geoJSON(geojson, {
-                    style: f => styleForCategory(getCategory(f.properties.NAME || '')),
+        function parcelStyle(feature) {
+            const props = feature.properties;
+            const dev = isDeveloped(props.PROP_CLASS);
+            const sewer = hasSewer(props.SEWER_DESC);
+            const water = hasWater(props.WATER_DESC);
+            const exempt = isExempt(props.PROP_CLASS);
+
+            if (exempt) return { fillColor: '#aaa', fillOpacity: 0.5, color: '#888', weight: 0.5 };
+            if (dev && sewer && water) return { fillColor: '#27ae60', fillOpacity: 0.55, color: '#1e8449', weight: 0.5 };
+            if (!dev && sewer && water) return { fillColor: '#f39c12', fillOpacity: 0.55, color: '#d68910', weight: 0.5 };
+            if (!sewer || !water) return { fillColor: '#e74c3c', fillOpacity: 0.35, color: '#c0392b', weight: 0.5 };
+            return { fillColor: '#bbb', fillOpacity: 0.3, color: '#999', weight: 0.5 };
+        }
+
+        function parcelPopup(feature) {
+            const p = feature.properties;
+            const dev = isDeveloped(p.PROP_CLASS);
+            const sewer = hasSewer(p.SEWER_DESC);
+            const water = hasWater(p.WATER_DESC);
+            const exempt = isExempt(p.PROP_CLASS);
+            const cat = getCategory(p.CITYTOWN_NAME || p.MUNI_NAME || '');
+            const thresh = cat === 'urban' ? '300 units' : cat === 'nonurban' ? '100 units' : '20 units';
+
+            let qualify;
+            if (exempt) qualify = '<span class="qualify-maybe">Maybe — exempt property, check eligibility</span>';
+            else if (dev && sewer && water) qualify = '<span class="qualify-yes">Likely qualifies</span> — developed land with water & sewer';
+            else if (!dev && sewer && water) qualify = '<span class="qualify-maybe">Maybe — has utilities but land may be undeveloped</span>';
+            else if (!sewer || !water) qualify = '<span class="qualify-no">Unlikely — missing water/sewer service</span>';
+            else qualify = '<span class="qualify-maybe">Unknown — check utility status</span>';
+
+            const yrBlt = p.YR_BLT ? (p.YR_BLT > 0 ? p.YR_BLT : 'N/A') : 'N/A';
+            const av = p.TOTAL_AV ? '$' + p.TOTAL_AV.toLocaleString() : 'N/A';
+            const mktVal = p.FULL_MARKET_VAL ? '$' + p.FULL_MARKET_VAL.toLocaleString() : 'N/A';
+            const acres = p.ACRES ? p.ACRES.toFixed(2) + ' acres' : 'N/A';
+            const sqft = p.SQ_FT ? p.SQ_FT.toLocaleString() + ' sq ft' : 'N/A';
+
+            return '<div class="popup-content">' +
+                '<div class="popup-title">' + (p.PARCEL_ADDR || 'Parcel ' + (p.PRINT_KEY || p.SWIS_SBL_ID || '')) + '</div>' +
+                '<div class="popup-section"><div class="popup-label">Municipality:</div><div class="popup-value">' + (p.CITYTOWN_NAME || p.MUNI_NAME || 'N/A') + ' — <span class="threshold-badge threshold-' + cat + '">' + thresh + '</span></div></div>' +
+                '<div class="popup-section"><div class="popup-label">Property Class:</div><div class="popup-value">' + (p.PROP_CLASS || 'N/A') + (p.USED_AS_DESC ? ' (' + p.USED_AS_DESC + ')' : '') + '</div></div>' +
+                '<div class="popup-section"><div class="popup-label">Year Built:</div><div class="popup-value">' + yrBlt + '</div></div>' +
+                '<div class="popup-section"><div class="popup-label">Lot Size:</div><div class="popup-value">' + acres + ' / ' + sqft + '</div></div>' +
+                '<div class="popup-section"><div class="popup-label">Assessed Value:</div><div class="popup-value">' + av + ' (Market: ' + mktVal + ')</div></div>' +
+                '<div class="popup-section"><div class="popup-label">Sewer:</div><div class="popup-value">' + (p.SEWER_DESC || 'Unknown') + '</div></div>' +
+                '<div class="popup-section"><div class="popup-label">Water:</div><div class="popup-value">' + (p.WATER_DESC || 'Unknown') + '</div></div>' +
+                '<div class="popup-section"><div class="popup-label">SEQR Exemption Qualification:</div><div class="popup-value">' + qualify + '</div></div>' +
+                '<div class="popup-section"><div class="popup-label">SEQR Threshold (this municipality):</div><div class="popup-value">Housing up to ' + thresh + ' exempt from SEQR</div></div>' +
+                '</div>';
+        }
+
+        // --- Municipal boundary layer (shown when zoomed out) ---
+        let muniLayer = null;
+        const muniUrl = 'https://giswww.westchestergov.com/arcgis/rest/services/MunicipalBoundaries/MapServer/0/query?where=1%3D1&outFields=NAME,SQMILES&outSR=4326&f=geojson';
+
+        function loadMunis() {
+            fetch(muniUrl).then(r => r.json()).then(geojson => {
+                if (!geojson.features || !geojson.features.length) return;
+                muniLayer = L.geoJSON(geojson, {
+                    style: f => {
+                        const cat = getCategory(f.properties.NAME || '');
+                        const c = cat === 'urban' ? '#2d5a87' : cat === 'nonurban' ? '#c49b2f' : '#8c3b2f';
+                        return { fillColor: c, fillOpacity: 0.5, color: '#fff', weight: 1.5 };
+                    },
                     onEachFeature: (f, l) => {
-                        const n = f.properties.NAME || 'Municipality';
+                        const n = f.properties.NAME || '?';
+                        const cat = getCategory(n);
                         const s = f.properties.SQMILES || null;
-                        const c = getCategory(n);
-                        l.bindPopup(popupContent(n, s, c));
+                        const thresh = cat === 'urban' ? '300 units' : '100 units';
+                        l.bindPopup('<div class="popup-content"><div class="popup-title">' + n + '</div>' +
+                            '<div class="popup-section"><div class="popup-label">SEQR Threshold:</div><span class="threshold-badge threshold-' + cat + '">' + thresh + '</span></div>' +
+                            '<div class="popup-section"><div class="popup-label">Land Area:</div><div class="popup-value">' + (s ? s.toFixed(2) + ' sq mi' : 'N/A') + '</div></div>' +
+                            '<div class="popup-section"><div class="popup-label">Zoom in for:</div><div class="popup-value">Individual parcel SEQR qualification</div></div></div>');
                     }
-                }).addTo(map);
-                map.fitBounds(layer.getBounds(), { padding: [30, 30] });
-            })
-            .catch(err => {
-                console.error('GIS fetch failed:', err);
-                L.marker([41.1225, -73.7000]).addTo(map)
-                    .bindPopup('Unable to load Westchester County GIS data. The county GIS server may be temporarily unavailable.')
-                    .openPopup();
-            });
+                });
+                if (map.getZoom() < 14) muniLayer.addTo(map);
+                map.fitBounds(muniLayer.getBounds(), { padding: [30, 30] });
+            }).catch(err => console.error('Muni load failed:', err));
+        }
+        loadMunis();
+
+        // --- Parcel layer (shown when zoomed in) ---
+        let parcelLayer = null;
+        const PARCEL_FIELDS = 'PROP_CLASS,SEWER_DESC,WATER_DESC,CITYTOWN_NAME,MUNI_NAME,PARCEL_ADDR,YR_BLT,ACRES,SQ_FT,TOTAL_AV,FULL_MARKET_VAL,USED_AS_DESC,PRINT_KEY,SWIS_SBL_ID,OWNER_TYPE,PRIMARY_OWNER';
+        let parcelTimeout = null;
+
+        function loadParcels() {
+            const z = map.getZoom();
+            if (z < 13) {
+                if (parcelLayer) { map.removeLayer(parcelLayer); parcelLayer = null; }
+                if (muniLayer && !map.hasLayer(muniLayer)) muniLayer.addTo(map);
+                zoomHint.style.display = 'block';
+                zoomHint.textContent = 'Zoom in to see individual parcels';
+                return;
+            }
+            zoomHint.style.display = 'none';
+
+            // Debounce
+            clearTimeout(parcelTimeout);
+            parcelTimeout = setTimeout(() => {
+                const bounds = map.getBounds();
+                const bbox = bounds.getWest() + ',' + bounds.getSouth() + ',' + bounds.getEast() + ',' + bounds.getNorth();
+                const url = 'https://giswww.westchestergov.com/arcgis/rest/services/DataHub_TaxParcels/MapServer/0/query?where=1%3D1' +
+                    '&outFields=' + PARCEL_FIELDS +
+                    '&outSR=4326&f=geojson&maxAllowableOffset=5' +
+                    '&geometry=' + encodeURIComponent(bbox) +
+                    '&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects';
+
+                loader.style.display = 'block';
+                fetch(url).then(r => r.json()).then(geojson => {
+                    loader.style.display = 'none';
+                    if (!geojson.features || !geojson.features.length) return;
+
+                    if (parcelLayer) map.removeLayer(parcelLayer);
+                    if (muniLayer && map.hasLayer(muniLayer)) map.removeLayer(muniLayer);
+
+                    parcelLayer = L.geoJSON(geojson, {
+                        style: parcelStyle,
+                        onEachFeature: (f, l) => {
+                            l.bindPopup(parcelPopup(f), { maxWidth: 320 });
+                            l.bindTooltip((f.properties.PARCEL_ADDR || f.properties.PRINT_KEY || 'Parcel'), { sticky: true, direction: 'top', className: 'parcel-tooltip' });
+                        }
+                    }).addTo(map);
+                }).catch(err => {
+                    loader.style.display = 'none';
+                    console.error('Parcel load failed:', err);
+                });
+            }, 500);
+        }
+
+        map.on('moveend zoomend', loadParcels);
+        loadParcels();
+    })();
     </script>
 </body>
 </html>
